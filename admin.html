@@ -65,19 +65,62 @@ async function adminCall(action,payload={}){
   if(sessionError)throw sessionError;
   const token=sessionData.session?.access_token;
   if(!token)throw new Error('No active sign-in session. Please sign in again.');
-  const {data,error}=await client.functions.invoke(ADMIN_FUNCTION,{
-    headers:{Authorization:`Bearer ${token}`},
-    body:{action,...payload}
+
+  const res=await fetch(`${SUPABASE_URL}/functions/v1/${ADMIN_FUNCTION}`,{
+    method:'POST',
+    headers:{
+      Authorization:`Bearer ${token}`,
+      apikey:SUPABASE_PUBLISHABLE_KEY,
+      'Content-Type':'application/json'
+    },
+    body:JSON.stringify({action,...payload})
   });
-  if(error)throw error;
-  if(data?.error)throw new Error(data.error);
-  return data;
+
+  let body={};
+  try{body=await res.json();}catch(e){}
+
+  console.debug('Admin function response:',res.status,body);
+
+  if(!res.ok){
+    const serverMessage=body?.error||body?.message||`HTTP ${res.status}`;
+    throw new Error(`HTTP ${res.status}: ${serverMessage}`);
+  }
+
+  if(body?.error)throw new Error(body.error);
+  return body;
 }
-async function init(){try{const {data,error}=await client.auth.getSession();if(error)throw error;if(!data.session){$('login').classList.remove('hidden');setStatus('Not signed in. Sign in with your administrator account.');return;}user=data.session.user;const me=await adminCall('me');if(!me.allowed){setStatus(`Access denied. Server says: ${me.error||'This account is not an administrator.'}`,'bad');return;}$('account').textContent=user.email||user.id;$('admin').classList.remove('hidden');setStatus('🔐 Administrator access granted','good');await Promise.all([loadCloud(),loadUsers()]);}catch(e){setStatus('Administrator access failed: '+(e.message||e),'bad');}}
+async function init(){
+  try{
+    const {data,error}=await client.auth.getSession();
+    if(error)throw error;
+
+    if(!data.session){
+      $('login').classList.remove('hidden');
+      setStatus('Not signed in. Sign in with your administrator account.');
+      return;
+    }
+
+    user=data.session.user;
+    const me=await adminCall('me');
+
+    if(!me.allowed){
+      setStatus(`Access denied. Server response: ${me.error||JSON.stringify(me)}`,'bad');
+      return;
+    }
+
+    $('account').textContent=user.email||user.id;
+    $('admin').classList.remove('hidden');
+    setStatus('🔐 Administrator access granted','good');
+    await Promise.all([loadCloud(),loadUsers()]);
+  }catch(e){
+    setStatus('Administrator access failed: '+(e.message||e),'bad');
+    console.error('Administrator access diagnostic:',e);
+  }
+}
 async function signIn(){const email=$('email').value.trim(),password=$('password').value;if(!email||!password)return alert('Enter email and password.');setStatus('Signing in...');try{const {data,error}=await client.auth.signInWithPassword({email,password});if(error)throw error;user=data.user;location.reload();}catch(e){setStatus('Sign in failed: '+(e.message||e),'bad');}}
 async function signOut(){await client.auth.signOut();location.href='index.html';}
 async function loadCloud(){if(!user)return;try{const {data,error}=await client.from('anime_libraries').select('library,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;library=Array.isArray(data?.library)?data.library:[];cloudUpdated=data?.updated_at||'';$('updated').textContent=cloudUpdated?'Last cloud update: '+new Date(cloudUpdated).toLocaleString():'';renderStats();renderTable();}catch(e){setStatus('Cloud load failed: '+(e.message||e),'bad');}}
-async function saveCloud(){if(!user)return;setStatus('Saving cloud library...');try{const now=new Date().toISOString();const {error}=await client.from('anime_libraries').upsert({user_id:user.id,library,updated_at:now},{onConflict:'user_id'});if(error)throw error;cloudUpdated=now;$('updated').textContent='Last cloud update: '+new Date(now).toLocaleString();setStatus('☁️ Cloud saved • '+library.length+' anime','good');}catch(e){setStatus('Save failed: '+(e.message||e),'bad');}}
+async function saveCloud(){if(!user)return;setStatus('Saving cloud library...');try{const now=new Date().toISOString();const {error}=await client.from('anime_libraries').upsert({userId:user.id,library,updated_at:now},{onConflict:'user_id'});if(error)throw error;cloudUpdated=now;$('updated').textContent='Last cloud update: '+new Date(now).toLocaleString();setStatus('☁️ Cloud saved • '+library.length+' anime','good');}catch(e){setStatus('Save failed: '+(e.message||e),'bad');}}
 function renderStats(){const c=s=>library.filter(a=>a.status===s).length;const rated=library.filter(a=>Number(a.rating)>0).length;const avg=library.length?library.reduce((s,a)=>s+(Number(a.rating)||0),0)/library.length:0;$('total').textContent=library.length;$('completed').textContent=c('Completed');$('watching').textContent=c('Watching');$('planned').textContent=c('Plan to Watch');$('rated').textContent=rated;$('avg').textContent=avg.toFixed(1);}
 function renderTable(){const q=$('search').value.toLowerCase().trim(),st=$('filter').value;const list=library.filter(a=>(!q||String(a.name||'').toLowerCase().includes(q)||String(a.genres||'').toLowerCase().includes(q)||String(a.malId||'').includes(q))&&(st==='All'||a.status===st));$('tbody').innerHTML=list.length?list.map(a=>{const mal=malScoreOf(a);return `<tr><td>${a.poster?`<img class="poster" src="${esc(a.poster)}" onerror="this.style.opacity=.25">`:'—'}</td><td><b>${esc(a.name)}</b><div class="sub">${esc(a.genres||'')}</div></td><td><span class="pill">${esc(a.status||'')}</span></td><td>⭐ ${Number(a.rating||0).toFixed(1)}</td><td>${mal?`⭐ ${mal.toFixed(1)}`:'—'}</td><td>${Number(a.watched||0)}/${Number(a.episodes||0)||'?'}</td><td>${a.year||'—'}</td><td>${a.malId||'—'}</td><td><div class="rowactions"><button class="btn small" onclick="editAnime('${a.id}')">Edit</button><button class="btn small danger" onclick="deleteAnime('${a.id}')">Delete</button></div></td></tr>`}).join(''):`<tr><td colspan="9"><div class="empty">No matching anime.</div></td></tr>`;}
 function renderUsers(){const q=$('userSearch').value.toLowerCase().trim();const list=users.filter(u=>!q||String(u.email||'').toLowerCase().includes(q)||String(u.id||'').toLowerCase().includes(q));$('usersBody').innerHTML=list.length?list.map(u=>{const isAdmin=String(u.email||'').toLowerCase()===String(user?.email||'').toLowerCase();const banned=!!u.banned_until;const status=isAdmin?'<span class="pill good">Admin</span>':banned?'<span class="pill bad">Restricted</span>':u.email_confirmed_at?'<span class="pill good">Active</span>':'<span class="pill warn">Unconfirmed</span>';const actions=isAdmin?'<span class="sub">Protected</span>':`<button class="btn small" onclick="confirmUser('${u.id}')">Confirm</button>${banned?`<button class="btn small" onclick="unbanUser('${u.id}')">Restore</button>`:`<button class="btn small warn" onclick="banUser('${u.id}')">Restrict</button>`}<button class="btn small danger" onclick="removeUser('${u.id}','${esc(u.email||'')}')">Delete</button>`;return `<tr><td><b>${esc(u.email||'No email')}</b><div class="sub">${esc(u.id)}</div></td><td>${status}</td><td>${u.created_at?new Date(u.created_at).toLocaleString():'—'}</td><td>${u.last_sign_in_at?new Date(u.last_sign_in_at).toLocaleString():'Never'}</td><td><div class="rowactions">${actions}</div></td></tr>`}).join(''):`<tr><td colspan="5"><div class="empty">No users found.</div></td></tr>`;}
