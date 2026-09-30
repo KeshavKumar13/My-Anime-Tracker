@@ -198,7 +198,7 @@ async function updateAdminButton(){
       headers,
       body:{action:'me'}
     });
-    if(!error && data?.allowed===true) btn.style.display='inline-flex';
+    if(!error && (data?.allowed===true || data?.isAdmin===true)) btn.style.display='inline-flex';
   }catch(e){
     console.debug('Admin check unavailable:',e);
   }
