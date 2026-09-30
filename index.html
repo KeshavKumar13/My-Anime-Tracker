@@ -190,9 +190,21 @@ async function getAdminSessionHeaders(){
 
 async function updateAdminButton(){
   const btn=document.getElementById('adminMenuBtn');
-  if(btn) btn.style.display='none';
-  if(!currentUser||!btn)return;
+  if(!btn)return;
 
+  btn.style.display='none';
+  if(!currentUser)return;
+
+  // This controls only whether the Admin link is visible.
+  // The Edge Function remains the real security boundary for admin actions.
+  const adminEmail='keshav.kumar13@outlook.com';
+  const signedInEmail=String(currentUser.email||'').trim().toLowerCase();
+
+  if(signedInEmail===adminEmail){
+    btn.style.display='flex';
+  }
+
+  // Also verify the signed-in session with the protected Edge Function.
   try{
     const {data,error}=await supabaseClient.auth.getSession();
     if(error) throw error;
@@ -219,7 +231,7 @@ async function updateAdminButton(){
       btn.style.display='flex';
     }
   }catch(e){
-    console.debug('Admin check unavailable:',e);
+    console.debug('Admin verification unavailable:',e);
   }
 }
 
