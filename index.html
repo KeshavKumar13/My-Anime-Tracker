@@ -180,14 +180,28 @@ function save(){
   if(cloudSyncReady&&!cloudLoading) queueCloudSave();
 }
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+async function getAdminSessionHeaders(){
+  const {data,error}=await supabaseClient.auth.getSession();
+  if(error) throw error;
+  const token=data.session?.access_token;
+  if(!token) throw new Error('No active sign-in session.');
+  return {Authorization:`Bearer ${token}`};
+}
+
 async function updateAdminButton(){
   const btn=document.getElementById('adminMenuBtn');
   if(btn) btn.style.display='none';
   if(!currentUser||!btn)return;
   try{
-    const {data,error}=await supabaseClient.functions.invoke('admin',{body:{action:'me'}});
+    const headers=await getAdminSessionHeaders();
+    const {data,error}=await supabaseClient.functions.invoke('admin',{
+      headers,
+      body:{action:'me'}
+    });
     if(!error && data?.allowed===true) btn.style.display='inline-flex';
-  }catch(e){ /* Admin function may not be deployed yet. */ }
+  }catch(e){
+    console.debug('Admin check unavailable:',e);
+  }
 }
 
 function setAuthStatus(text,kind=''){

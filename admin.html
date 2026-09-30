@@ -60,7 +60,19 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const malScoreOf=a=>{const n=Number(a?.malScore??a?.mal_score??a?.score??0);return Number.isFinite(n)&&n>0?n:0};
 function setStatus(t,kind=''){ $('status').textContent=t; $('status').className='status '+kind; }
-async function adminCall(action,payload={}){const {data,error}=await client.functions.invoke(ADMIN_FUNCTION,{body:{action,...payload}});if(error)throw error;if(data?.error)throw new Error(data.error);return data;}
+async function adminCall(action,payload={}){
+  const {data:sessionData,error:sessionError}=await client.auth.getSession();
+  if(sessionError)throw sessionError;
+  const token=sessionData.session?.access_token;
+  if(!token)throw new Error('No active sign-in session. Please sign in again.');
+  const {data,error}=await client.functions.invoke(ADMIN_FUNCTION,{
+    headers:{Authorization:`Bearer ${token}`},
+    body:{action,...payload}
+  });
+  if(error)throw error;
+  if(data?.error)throw new Error(data.error);
+  return data;
+}
 async function init(){try{const {data,error}=await client.auth.getSession();if(error)throw error;if(!data.session){$('login').classList.remove('hidden');setStatus('Not signed in. Sign in with your administrator account.');return;}user=data.session.user;const me=await adminCall('me');if(!me.allowed){setStatus('Access denied. This account is not an administrator.','bad');return;}$('account').textContent=user.email||user.id;$('admin').classList.remove('hidden');setStatus('🔐 Administrator access granted','good');await Promise.all([loadCloud(),loadUsers()]);}catch(e){setStatus('Administrator access failed: '+(e.message||e),'bad');}}
 async function signIn(){const email=$('email').value.trim(),password=$('password').value;if(!email||!password)return alert('Enter email and password.');setStatus('Signing in...');try{const {data,error}=await client.auth.signInWithPassword({email,password});if(error)throw error;user=data.user;location.reload();}catch(e){setStatus('Sign in failed: '+(e.message||e),'bad');}}
 async function signOut(){await client.auth.signOut();location.href='index.html';}
