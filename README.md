@@ -1,58 +1,15 @@
-# My Anime Tracker • Admin + UI Update
+# My Anime Tracker
 
-This update keeps the existing GitHub Pages + Supabase tracker and adds:
+Cloud-synced GitHub Pages anime tracker with Supabase authentication and a protected admin dashboard.
 
-- Private administrator dashboard
-- Real admin authorization through a Supabase Edge Function
-- User creation
-- User listing/search
-- Email confirmation
-- Restrict/unrestrict user access
-- User deletion
-- Protected administrator account
-- Anime library editing from the admin dashboard
-- Visible MAL rating on anime cards and in the admin table
-- Clickable dashboard status cards that filter the library
-- Tools dropdown closes when clicking elsewhere
-- Existing AniList search/enrichment, import/export and cloud sync retained
+## This update
+- Removed the cloud/local library conflict popup when both copies exist. Once signed in, the cloud library is the source of truth.
+- Added MAL Rating sorting (high to low and low to high).
+- Made dashboard status stats clickable to filter the library.
+- Added active state to the selected status stat.
+- Tools dropdown now closes when clicking anywhere outside it or selecting a tool.
+- Made Sign In / Sign Up controls smaller and cleaner.
+- Existing Supabase sync, AniList search, enrichment, import/export, and admin functionality remain intact.
 
-## Files
-
-- `index.html` — main tracker
-- `admin.html` — administrator dashboard
-- `supabase/functions/admin/index.ts` — protected server-side admin function
-
-## Important security setup
-
-The browser app contains only the Supabase publishable key. Do **not** put a Supabase secret/service-role key into `index.html` or `admin.html`.
-
-The admin dashboard calls the `admin` Edge Function. The Edge Function checks the signed-in user's email against the `ADMIN_EMAIL` secret and performs privileged Auth actions server-side.
-
-### Deploy the Edge Function
-
-In Supabase:
-
-1. Open **Edge Functions**.
-2. Create a function named `admin`.
-3. Replace its code with `supabase/functions/admin/index.ts` from this package.
-4. Deploy the function.
-5. Add an Edge Function secret:
-
-   `ADMIN_EMAIL=your-admin-email@example.com`
-
-Use the exact email address of the account that should own administrator access.
-
-After deployment, sign in to the main tracker with that account. The **Admin** button will appear. Other accounts will not receive the Admin button, and direct access to `admin.html` is denied by the server-side function.
-
-## GitHub Pages files
-
-Upload these two files to the repository root:
-
-- `index.html`
-- `admin.html`
-
-The Edge Function is deployed in Supabase, not GitHub Pages.
-
-## Commit message
-
-`Improve UI, secure admin access, and add user management`
+## GitHub commit
+**Polish filters, sorting, auth controls, and cloud sync UX**
