@@ -1,21 +1,21 @@
-# My Anime Tracker
+# My Anime Tracker — Admin Integration
 
-GitHub Pages personal anime tracker with Supabase cloud sync, profile menu, private admin access, AniList enrichment, and MAL statistics.
+This update connects the GitHub Pages frontend to the deployed Supabase `admin` Edge Function.
 
-## UI updates
-- Sign in / Sign up moved into a compact account menu in the top-right.
-- Signed-in users see their profile name and avatar in the corner.
-- Profile supports first name, last name, and profile picture URL.
-- Change password is available from the account menu.
-- Cloud sync status is no longer permanently displayed on the page.
-- Normal users see only Enrich Library; admin testing tools remain in the admin area.
-- MAL rating and MAL scored-by vote count are shown on cards.
-- Sort by MAL rating and MAL vote count.
-- Stats cards are clickable filters.
-- Outside clicks close the account menu.
+## Included
+- Admin option appears only when the signed-in account is authorized by the Edge Function.
+- Admin dashboard verifies authorization server-side before loading user management.
+- User management actions use the deployed Edge Function action names.
+- Admin account is displayed as protected and cannot be deleted/restricted by the backend.
+- No Supabase secret/service key is included in the frontend.
 
-## MAL statistics
-Enrich Library uses AniList for metadata and Jikan for MyAnimeList score/scored-by statistics. Existing entries missing `malVotes` will request the MAL statistics during enrichment.
+## Deployment
+Upload/replace these files in the GitHub Pages repository root:
+- `index.html`
+- `admin.html`
+- `README.md`
 
-## Commit comment
-**Polish account UI, add profile controls, and add MAL vote statistics**
+The Supabase Edge Function must be deployed as `admin` with the `ADMIN_EMAIL` secret configured.
+
+## Commit message
+`Connect GitHub UI to protected Supabase admin function`

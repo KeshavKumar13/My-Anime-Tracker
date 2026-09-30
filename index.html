@@ -186,7 +186,7 @@ async function updateAdminButton(){
   if(!currentUser||!btn)return;
   try{
     const {data,error}=await supabaseClient.functions.invoke('admin',{body:{action:'me'}});
-    if(!error && data?.isAdmin) btn.style.display='inline-flex';
+    if(!error && data?.allowed===true) btn.style.display='inline-flex';
   }catch(e){ /* Admin function may not be deployed yet. */ }
 }
 
