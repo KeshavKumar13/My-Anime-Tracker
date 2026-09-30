@@ -45,6 +45,11 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(4px)}
 .modal{padding:22px}.modal h2{margin:0 0 18px}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:var(--muted)}
 textarea{resize:vertical;min-height:80px}.modalfooter{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
 .file{display:none}
+.authbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-8px 0 18px;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.authbar .control{padding:8px 10px;min-width:170px}
+.authstatus{font-size:12px;color:var(--muted);margin-right:auto}
+.authstatus.good{color:var(--good)}
+.authstatus.warn{color:#f1c75b}
 .topline{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px}.sectiontitle{font-size:16px;font-weight:700}
 @media(max-width:1050px){.stats{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:900px){.grid{grid-template-columns:repeat(3,1fr)}}
@@ -57,7 +62,7 @@ textarea{resize:vertical;min-height:80px}.modalfooter{display:flex;justify-conte
 <header>
   <div class="brand">
     <div class="logo">🎌</div>
-    <div><h1>My Anime Tracker</h1><div class="subtitle">Your personal anime library & ranking <span style="opacity:.5">• V1</span></div></div>
+    <div><h1>My Anime Tracker</h1><div class="subtitle">Your personal anime library & ranking <span style="opacity:.5">• Cloud Sync</span></div></div>
   </div>
   <div class="actions">
     <button class="btn" onclick="exportData()">Export</button><button class="btn" onclick="testAnimeApi()">🔌 Test AniList</button><button class="btn" onclick="fallbackTest2()">🧪 Test 2 Anime</button><button class="btn" onclick="retryTest48413()">🔁 Retry MAL 48413</button><button class="btn" onclick="enrichLibrary()">✨ Enrich Library</button>
@@ -66,6 +71,15 @@ textarea{resize:vertical;min-height:80px}.modalfooter{display:flex;justify-conte
     <button class="btn primary" onclick="openAdd()">＋ Add Anime</button>
   </div>
 </header>
+
+<div class="authbar">
+  <div id="authStatus" class="authstatus">☁️ Cloud sync: not signed in</div>
+  <input id="authEmail" class="control" type="email" autocomplete="email" placeholder="Email">
+  <input id="authPassword" class="control" type="password" autocomplete="current-password" placeholder="Password">
+  <button class="btn" onclick="authSignIn()">Sign In</button>
+  <button class="btn" onclick="authSignUp()">Sign Up</button>
+  <button id="signOutBtn" class="btn" style="display:none" onclick="authSignOut()">Sign Out</button>
+</div>
 
 <div id="fileWarning" style="display:none;margin:-8px 0 18px;padding:12px 14px;border:1px solid #4b405f;background:#171323;border-radius:12px;font-size:13px">
   <b>ℹ️ File mode detected.</b>
@@ -138,13 +152,189 @@ textarea{resize:vertical;min-height:80px}.modalfooter{display:flex;justify-conte
 </div>
 </dialog>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const KEY='my_anime_tracker_v1';
+const SUPABASE_URL='https://kaqbxadtdwevfewwbwki.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_yZo6seTM940w_eF648go5w_8UYZA5lJ';
+const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+let currentUser=null;
+let cloudSyncReady=false;
+let cloudSyncTimer=null;
+let cloudLoading=false;
+let lastHandledUserId='';
 let anime=JSON.parse(localStorage.getItem(KEY)||'[]');
 let editId=null;
 
-function save(){localStorage.setItem(KEY,JSON.stringify(anime))}
+function save(){
+  localStorage.setItem(KEY,JSON.stringify(anime));
+  if(cloudSyncReady&&!cloudLoading) queueCloudSave();
+}
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function setAuthStatus(text,kind=''){
+  const el=document.getElementById('authStatus');
+  if(!el)return;
+  el.textContent=text;
+  el.className='authstatus'+(kind?' '+kind:'');
+}
+
+function authValues(){
+  return {email:document.getElementById('authEmail').value.trim(),password:document.getElementById('authPassword').value};
+}
+
+async function authSignUp(){
+  const {email,password}=authValues();
+  if(!email||!password){alert('Enter an email and password first.');return;}
+  if(password.length<6){alert('Password must be at least 6 characters.');return;}
+  setAuthStatus('Creating account...');
+  try{
+    const {data,error}=await supabaseClient.auth.signUp({email,password});
+    if(error)throw error;
+    if(data.session){
+      setAuthStatus('☁️ Signed in as '+email,'good');
+    }else{
+      setAuthStatus('📧 Check your email to confirm your account.','warn');
+      alert('Account created. Supabase may require email confirmation before you can sign in. Check your inbox.');
+    }
+  }catch(err){
+    setAuthStatus('⚠️ Sign up failed','warn');
+    alert('Sign up failed.\n\n'+(err.message||String(err)));
+  }
+}
+
+async function authSignIn(){
+  const {email,password}=authValues();
+  if(!email||!password){alert('Enter your email and password first.');return;}
+  setAuthStatus('Signing in...');
+  try{
+    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
+    if(error)throw error;
+    currentUser=data.user;
+    await handleSignedInUser();
+  }catch(err){
+    setAuthStatus('⚠️ Sign in failed','warn');
+    alert('Sign in failed.\n\n'+(err.message||String(err)));
+  }
+}
+
+async function authSignOut(){
+  try{await supabaseClient.auth.signOut();}catch(err){console.error('Sign out failed',err);}
+}
+
+function queueCloudSave(){
+  clearTimeout(cloudSyncTimer);
+  setAuthStatus('☁️ Saving cloud library...');
+  cloudSyncTimer=setTimeout(()=>saveCloudLibrary(),700);
+}
+
+async function saveCloudLibrary(){
+  if(!cloudSyncReady||!currentUser||cloudLoading)return;
+  try{
+    const {error}=await supabaseClient.from('anime_libraries').upsert({
+      user_id:currentUser.id,
+      library:anime,
+      updated_at:new Date().toISOString()
+    },{onConflict:'user_id'});
+    if(error)throw error;
+    setAuthStatus('☁️ Cloud synced • '+anime.length+' anime','good');
+  }catch(err){
+    console.error('Cloud save failed',err);
+    setAuthStatus('⚠️ Cloud save failed','warn');
+  }
+}
+
+async function loadCloudLibrary(){
+  if(!currentUser)return null;
+  const {data,error}=await supabaseClient.from('anime_libraries').select('library,updated_at').eq('user_id',currentUser.id).maybeSingle();
+  if(error)throw error;
+  return data;
+}
+
+async function handleSignedInUser(){
+  if(!currentUser||lastHandledUserId===currentUser.id)return;
+  lastHandledUserId=currentUser.id;
+  cloudSyncReady=false;
+  cloudLoading=true;
+  setAuthStatus('☁️ Loading cloud library...');
+  document.getElementById('signOutBtn').style.display='inline-block';
+  try{
+    const cloud=await loadCloudLibrary();
+    const cloudLibrary=Array.isArray(cloud?.library)?cloud.library:[];
+    if(cloudLibrary.length===0){
+      cloudLoading=false;
+      if(anime.length>0){
+        const upload=confirm(`Your cloud library is empty.\n\nUpload this device's ${anime.length} anime to the cloud?`);
+        if(upload){
+          cloudSyncReady=true;
+          await saveCloudLibrary();
+        }else{
+          cloudSyncReady=true;
+          setAuthStatus('☁️ Signed in • cloud library still empty','warn');
+        }
+      }else{
+        cloudSyncReady=true;
+        setAuthStatus('☁️ Signed in • cloud library empty','good');
+      }
+    }else if(anime.length===0){
+      anime=cloudLibrary;
+      saveLocalOnly();
+      cloudLoading=false;
+      cloudSyncReady=true;
+      render();
+      setAuthStatus('☁️ Cloud library loaded • '+anime.length+' anime','good');
+    }else{
+      cloudLoading=false;
+      const useCloud=confirm(`A cloud library with ${cloudLibrary.length} anime was found, and this device already has ${anime.length} anime.\n\nClick OK to use the cloud library.\nClick Cancel to upload this device's library and replace the cloud copy.`);
+      if(useCloud){
+        anime=cloudLibrary;
+        saveLocalOnly();
+        render();
+        cloudSyncReady=true;
+        setAuthStatus('☁️ Cloud library loaded • '+anime.length+' anime','good');
+      }else{
+        cloudSyncReady=true;
+        await saveCloudLibrary();
+      }
+    }
+  }catch(err){
+    console.error('Cloud library load failed',err);
+    cloudLoading=false;
+    cloudSyncReady=false;
+    setAuthStatus('⚠️ Cloud connection failed','warn');
+    alert('Could not load the cloud library. Your local library is still safe.\n\n'+(err.message||String(err)));
+  }
+}
+
+function saveLocalOnly(){localStorage.setItem(KEY,JSON.stringify(anime));}
+
+async function handleAuthState(session){
+  currentUser=session?.user||null;
+  if(currentUser){
+    await handleSignedInUser();
+  }else{
+    lastHandledUserId='';
+    cloudSyncReady=false;
+    cloudLoading=false;
+    document.getElementById('signOutBtn').style.display='none';
+    setAuthStatus('☁️ Cloud sync: not signed in');
+  }
+}
+
+supabaseClient.auth.onAuthStateChange((event,session)=>{
+  setTimeout(()=>handleAuthState(session),0);
+});
+
+async function initCloudAuth(){
+  try{
+    const {data,error}=await supabaseClient.auth.getSession();
+    if(error)throw error;
+    await handleAuthState(data.session);
+  }catch(err){
+    console.error('Auth initialization failed',err);
+    setAuthStatus('⚠️ Cloud auth unavailable','warn');
+  }
+}
+
 function openAdd(){
   editId=null; document.getElementById('modalTitle').textContent='Add Anime';
   document.getElementById('form').reset(); document.getElementById('ratingInput').value='8.0';
@@ -667,6 +857,7 @@ function normalizeImportedItem(item){
   };
 }
 render();
+initCloudAuth();
 </script>
 </body>
 </html>
