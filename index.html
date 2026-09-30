@@ -192,13 +192,32 @@ async function updateAdminButton(){
   const btn=document.getElementById('adminMenuBtn');
   if(btn) btn.style.display='none';
   if(!currentUser||!btn)return;
+
   try{
-    const headers=await getAdminSessionHeaders();
-    const {data,error}=await supabaseClient.functions.invoke('admin',{
-      headers,
-      body:{action:'me'}
+    const {data,error}=await supabaseClient.auth.getSession();
+    if(error) throw error;
+
+    const token=data.session?.access_token;
+    if(!token) throw new Error('No active sign-in session.');
+
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/admin`,{
+      method:'POST',
+      headers:{
+        'Authorization':`Bearer ${token}`,
+        'apikey':SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({action:'me'})
     });
-    if(!error && (data?.allowed===true || data?.isAdmin===true)) btn.style.display='inline-flex';
+
+    let result={};
+    try{result=await res.json();}catch(e){}
+
+    console.debug('Admin check:',res.status,result);
+
+    if(res.ok && (result?.allowed===true || result?.isAdmin===true)){
+      btn.style.display='flex';
+    }
   }catch(e){
     console.debug('Admin check unavailable:',e);
   }
