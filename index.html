@@ -57,6 +57,7 @@ dialog{width:min(620px,calc(100% - 28px));border:1px solid var(--line);border-ra
       </div>
     </details>
     <button class="btn primary" onclick="openAdd()">＋ Add Anime</button>
+    <a class="btn" href="admin.html" id="adminBtn" style="display:none;text-decoration:none">🛠 Admin</a>
   </div>
 </header>
 
@@ -163,6 +164,11 @@ function save(){
   if(cloudSyncReady&&!cloudLoading) queueCloudSave();
 }
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function updateAdminButton(){
+  const btn=document.getElementById('adminBtn');
+  if(btn) btn.style.display=currentUser?'inline-flex':'none';
+}
+
 function setAuthStatus(text,kind=''){
   const el=document.getElementById('authStatus');
   if(!el)return;
@@ -301,6 +307,7 @@ function saveLocalOnly(){localStorage.setItem(KEY,JSON.stringify(anime));}
 
 async function handleAuthState(session){
   currentUser=session?.user||null;
+  updateAdminButton();
   if(currentUser){
     await handleSignedInUser();
   }else{
@@ -309,6 +316,7 @@ async function handleAuthState(session){
     cloudLoading=false;
     document.getElementById('signOutBtn').style.display='none';
     setAuthStatus('☁️ Cloud sync: not signed in');
+    updateAdminButton();
   }
 }
 

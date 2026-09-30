@@ -1,21 +1,22 @@
-# My Anime Tracker
+# My Anime Tracker UI + Admin Dashboard
 
-GitHub Pages version with Supabase cloud sync and AniList enrichment.
+GitHub Pages ready static version of My Anime Tracker with Supabase cloud sync and a dedicated `admin.html` dashboard.
 
-## UI update
-- Cleaner dashboard layout with a dedicated library header
-- Developer/API test actions moved into a Tools menu
-- Larger responsive anime cards with improved poster presentation
-- Episode progress bar on anime posters
-- Cleaner authentication and cloud status bar
-- Improved spacing, borders, hover states and mobile layout
-- Existing search, filtering, sorting, import/export, AniList enrichment and Supabase sync retained
+## Files
+- `index.html` — main tracker
+- `admin.html` — authenticated admin/control dashboard for the signed-in user's cloud library
 
-## Deployment
-Upload `index.html` to the repository root and keep GitHub Pages on the `main` branch and `/ (root)`.
+## Admin capabilities
+- View cloud library and statistics
+- Search/filter anime
+- Add, edit and delete anime
+- Save/reload the cloud library
+- Backup and restore JSON
+- Delete the entire cloud library
+- Clear the local browser cache
 
-## Supabase
-The app uses the browser-safe Supabase publishable key and the `anime_libraries` table protected by Row Level Security.
+## Security note
+The admin dashboard uses the normal Supabase browser client and Row Level Security. It controls the authenticated user's own library. A true multi-user super-admin that can manage other users should be implemented with a protected Supabase Edge Function/service role key; never expose a service role key in GitHub Pages.
 
 ## Commit comment
-**Polish dashboard UI and improve anime card layout**
+**Add authenticated admin dashboard for library control**
